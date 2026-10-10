@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#14161a">
+  <meta name="description" content="Free, open-source truck navigation: truck-safe routes, traffic lights, speed limits, GPX export. No ads, no tracking.">
+  <title>TruckNav</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="vendor/maplibre-gl.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="map" aria-label="Map"></div>
+
+  <section id="plan" class="sheet">
+    <div class="field">
+      <span class="dot from"></span>
+      <input id="from" type="search" autocomplete="off" placeholder="My location" aria-label="Start">
+    </div>
+    <div class="field">
+      <span class="dot to"></span>
+      <input id="to" type="search" autocomplete="off" placeholder="Where to? Address, place, or lat,lon" aria-label="Destination">
+    </div>
+    <ul id="results" hidden></ul>
+    <div class="actions plan-actions">
+      <button id="btnRoute" class="primary">Route</button>
+      <button id="btnTruck" aria-label="Truck profile">Truck <small id="truckBadge"></small></button>
+      <button id="btnSaved">Saved</button>
+      <button id="btnSettings" aria-label="Settings">⚙</button>
+    </div>
+    <div id="summary" hidden>
+      <div class="sum-main"><b id="sumDist"></b><span id="sumDur"></span></div>
+      <div id="sumData" class="sum-sub"></div>
+      <button id="btnGo" class="primary go">Start navigation</button>
+      <div class="actions sum-actions">
+        <button id="btnSave">Save</button>
+        <button id="btnGpx">GPX</button>
+        <button id="btnGeojson">GeoJSON</button>
+        <button id="btnTiles" title="Save map tiles along this route for offline use">Offline</button>
+      </div>
+    </div>
+    <div id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section id="nav" hidden>
+    <div id="banner">
+      <div id="manIcon">↑</div>
+      <div class="ban-text">
+        <div id="manDist"></div>
+        <div id="manText"></div>
+      </div>
+    </div>
+    <div id="offRoute" hidden>Off route — rerouting…</div>
+    <div class="navFab">
+      <button id="btnOverview" aria-label="Show whole route">⤢</button>
+      <button id="btnRecenter" aria-label="Follow my position">◎</button>
+    </div>
+    <div id="navBottom">
+      <div id="limitSign" class="sign us" hidden><small>SPEED<br>LIMIT</small><b id="limitVal"></b></div>
+      <div id="speedNow"><b id="spdVal">–</b><small id="spdUnit"></small></div>
+      <div id="navInfo">
+        <div id="eta"></div>
+        <div id="remain"></div>
+        <div id="nextLight"></div>
+      </div>
+      <button id="btnEnd" class="danger">End</button>
+    </div>
+  </section>
+
+  <dialog id="dlgTruck">
+    <form method="dialog" id="truckForm">
+      <h2>Truck profile</h2>
+      <p class="hint">Routes avoid roads whose OpenStreetMap limits are below these values.</p>
+      <div id="truckFields"></div>
+      <label>Vehicle type
+        <select name="vehicleType">
+          <option value="hgv">Heavy goods (tractor-trailer)</option>
+          <option value="goods">Goods</option>
+          <option value="delivery">Delivery</option>
+          <option value="bus">Bus</option>
+          <option value="agricultural">Agricultural</option>
+          <option value="forestry">Forestry</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" name="hazmat"> Hazardous materials</label>
+      <label class="check"><input type="checkbox" name="avoidTolls"> Avoid tolls</label>
+      <label class="check"><input type="checkbox" name="avoidFerries"> Avoid ferries</label>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgSettings">
+    <form method="dialog" id="settingsForm">
+      <h2>Settings</h2>
+      <label>Units
+        <select name="units">
+          <option value="imperial">Miles, feet, pounds</option>
+          <option value="metric">Kilometers, meters, tonnes</option>
+        </select>
+      </label>
+      <label>openrouteservice API key
+        <input name="orsKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste key">
+      </label>
+      <p class="hint">Free key: <a href="https://openrouteservice.org/plans/" target="_blank" rel="noopener">openrouteservice.org/plans</a>. Stored only on this device.</p>
+      <label class="check"><input type="checkbox" name="voice"> Voice directions</label>
+      <label class="check"><input type="checkbox" name="signalAlert"> Traffic light alerts</label>
+      <label class="check"><input type="checkbox" name="speedAlert"> Over-speed alert</label>
+      <label class="check"><input type="checkbox" name="night"> Night map</label>
+      <details>
+        <summary>Servers</summary>
+        <label>Routing server <input name="orsBase" type="url" spellcheck="false"></label>
+        <label>Overpass server <input name="overpassUrl" type="url" spellcheck="false"></label>
+      </details>
+      <div class="actions">
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgSaved">
+    <form method="dialog">
+      <h2>Saved routes</h2>
+      <p class="hint">Saved routes open without a connection.</p>
+      <ul id="savedList"></ul>
+      <div class="actions"><button value="close">Close</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
