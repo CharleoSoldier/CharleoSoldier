@@ -37,10 +37,11 @@ export async function routeTruck({ base, key, points, truck, language, signal })
   return data;
 }
 
-export async function searchPlaces(q, near, signal) {
+export async function searchPlaces(q, near, signal, bbox = null) {
   const u = new URL(PHOTON_URL);
   u.searchParams.set('q', q);
   u.searchParams.set('limit', '6');
+  if (bbox) u.searchParams.set('bbox', bbox.map((n) => n.toFixed(2)).join(','));
   if (near) {
     u.searchParams.set('lat', near[1].toFixed(4));
     u.searchParams.set('lon', near[0].toFixed(4));

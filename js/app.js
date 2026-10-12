@@ -36,8 +36,9 @@ const view = S.loadView();
 const map = new maplibregl.Map({
   container: 'map',
   style: STYLE_URL,
-  center: view ? view.center : [-98.58, 39.83],
-  zoom: view ? view.zoom : 3.5,
+  ...(view
+    ? { center: view.center, zoom: view.zoom }
+    : { bounds: [[C.REGION[0], C.REGION[1]], [C.REGION[2], C.REGION[3]]], fitBoundsOptions: { padding: 20 } }),
   maxPitch: 70,
   attributionControl: false,
 });
@@ -65,6 +66,16 @@ map.on('load', () => {
   map.addLayer({ id: 'route-casing', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#0b3a8a', 'line-width': w(5, 14) } }, beforeId);
   map.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#2f7cf6', 'line-width': w(3, 9) } }, beforeId);
   map.addLayer({ id: 'signals', type: 'circle', source: 'signals', minzoom: 10, paint: { 'circle-color': '#e5484d', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 3, 16, 8], 'circle-stroke-color': '#ffd400', 'circle-stroke-width': 2 } });
+  const vectorId = Object.keys(map.getStyle().sources).find((id) => map.getStyle().sources[id].type === 'vector');
+  if (vectorId) {
+    // admin_level=6 is a US county. Lines shared with a state boundary carry level 4 and are drawn by the base style.
+    map.addLayer({
+      id: 'county-lines', type: 'line', source: vectorId, 'source-layer': 'boundary', minzoom: 7,
+      filter: ['all', ['==', ['get', 'admin_level'], 6], ['!=', ['get', 'maritime'], 1]],
+      layout: { 'line-join': 'round', visibility: state.settings.countyLines ? 'visible' : 'none' },
+      paint: { 'line-color': '#9b5de5', 'line-opacity': 0.9, 'line-dasharray': [4, 2], 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 1.2, 12, 2.6] },
+    }, beforeId);
+  }
   map.addLayer({ id: 'ends', type: 'circle', source: 'ends', paint: { 'circle-color': ['get', 'color'], 'circle-radius': 8, 'circle-stroke-color': '#fff', 'circle-stroke-width': 3 } });
   if (state.route) renderRoute();
 });
@@ -147,8 +158,8 @@ function truckBadge() {
   const f = C.truckToForm(state.truck, units());
   $('truckBadge').textContent =
     units() === 'imperial'
-      ? `${f.heightFt}'${f.heightIn}" · ${Math.round(f.weight / 1000)}k${state.truck.hazmat ? ' · HAZ' : ''}`
-      : `${f.height}m · ${f.weight}t${state.truck.hazmat ? ' · HAZ' : ''}`;
+      ? `${f.heightFt}'${f.heightIn}" · ${Math.round(f.weight / 1000)}k${state.truck.hazmat ? ' · HAZ' : ''}${state.truck.backroads ? ' · BR' : ''}`
+      : `${f.height}m · ${f.weight}t${state.truck.hazmat ? ' · HAZ' : ''}${state.truck.backroads ? ' · BR' : ''}`;
 }
 
 // ---------- search ----------
@@ -186,8 +197,8 @@ async function runSearch(q) {
   const ctrl = new AbortController();
   state.searchAbort = ctrl;
   try {
-    const results = await searchPlaces(q, map.getCenter().toArray(), ctrl.signal);
-    showResults(results, results.length ? '' : 'No matches. Try a city or full address, or long-press the map.');
+    const results = await searchPlaces(q, map.getCenter().toArray(), ctrl.signal, state.settings.regionOnly ? C.REGION : null);
+    showResults(results, results.length ? '' : state.settings.regionOnly ? 'No matches in GA, SC or NC. Try a fuller address, long-press the map, or turn off the region filter in Settings.' : 'No matches. Try a city or full address, or long-press the map.');
   } catch (e) {
     if (e.name === 'AbortError') return;
     showResults([], e instanceof TypeError ? 'Search needs a connection. Long-press the map to pick a point.' : e.message);
@@ -365,6 +376,7 @@ $('btnTruck').onclick = () => {
   form.hazmat.checked = state.truck.hazmat;
   form.avoidTolls.checked = state.truck.avoidTolls;
   form.avoidFerries.checked = state.truck.avoidFerries;
+  form.backroads.checked = state.truck.backroads;
   $('dlgTruck').showModal();
 };
 
@@ -380,6 +392,7 @@ $('dlgTruck').addEventListener('close', () => {
     hazmat: form.hazmat.checked,
     avoidTolls: form.avoidTolls.checked,
     avoidFerries: form.avoidFerries.checked,
+    backroads: form.backroads.checked,
   };
   if (!C.validTruck(t)) return setStatus('Truck profile not saved: every size must be above zero.', true);
   state.truck = t;
@@ -395,7 +408,10 @@ $('btnSettings').onclick = () => {
   f.orsKey.value = s.orsKey;
   f.orsBase.value = s.orsBase;
   f.overpassUrl.value = s.overpassUrl;
-  for (const k of ['voice', 'signalAlert', 'speedAlert', 'night']) f[k].checked = s[k];
+  for (const k of ['voice', 'signalAlert', 'speedAlert', 'night', 'showTurns', 'showLimits', 'showLights', 'countyLines', 'regionOnly']) f[k].checked = s[k];
+  f.view.value = s.view;
+  f.reach.value = s.reach;
+  f.rows.value = String(s.rows);
   $('dlgSettings').showModal();
 };
 
@@ -412,6 +428,14 @@ $('dlgSettings').addEventListener('close', () => {
     signalAlert: f.signalAlert.checked,
     speedAlert: f.speedAlert.checked,
     night: f.night.checked,
+    view: f.view.value,
+    reach: f.reach.value,
+    rows: Number(f.rows.value),
+    showTurns: f.showTurns.checked,
+    showLimits: f.showLimits.checked,
+    showLights: f.showLights.checked,
+    countyLines: f.countyLines.checked,
+    regionOnly: f.regionOnly.checked,
   };
   S.saveSettings(state.settings);
   applySettings();
@@ -420,6 +444,14 @@ $('dlgSettings').addEventListener('close', () => {
 
 function applySettings() {
   document.body.classList.toggle('night', state.settings.night);
+  document.body.classList.toggle('compact-rows', state.settings.rows >= 5);
+  if (map.getLayer('county-lines')) map.setLayoutProperty('county-lines', 'visibility', state.settings.countyLines ? 'visible' : 'none');
+  $('viewIcon').textContent = state.settings.view === 'eye' ? '⌖' : '3D';
+  if (state.nav) {
+    state.nav.zoom = null;
+    follow();
+    renderComing();
+  }
   truckBadge();
 }
 
@@ -556,6 +588,12 @@ $('btnTiles').onclick = async () => {
 
 $('btnGo').onclick = () => startNav();
 $('btnEnd').onclick = () => endNav();
+$('btnView').onclick = () => {
+  state.settings = { ...state.settings, view: state.settings.view === 'eye' ? 'drive' : 'eye' };
+  S.saveSettings(state.settings);
+  state.nav.follow = true;
+  applySettings();
+};
 $('btnRecenter').onclick = () => { if (state.nav) { state.nav.follow = true; follow(); } };
 $('btnOverview').onclick = () => {
   if (!state.nav) return;
@@ -580,10 +618,9 @@ function startNav() {
   $('plan').hidden = true;
   $('nav').hidden = false;
   $('spdUnit').textContent = units() === 'imperial' ? 'mph' : 'km/h';
-  $('manDist').textContent = '';
-  $('manText').textContent = 'Waiting for GPS…';
-  $('manIcon').textContent = '…';
   $('limitSign').hidden = true;
+  state.nav.msg = 'Waiting for GPS…';
+  renderComing();
   requestWakeLock();
   state.watchId = navigator.geolocation.watchPosition(onFix, onGeoError, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
   speak(state.route.steps[0] ? state.route.steps[0].instruction : 'Starting route');
@@ -597,6 +634,8 @@ function endNav() {
   state.wakeLock = null;
   speechSynthesis.cancel();
   puck.remove();
+  syncPins([]);
+  $('coming').replaceChildren();
   document.body.classList.remove('navigating');
   $('nav').hidden = true;
   $('plan').hidden = false;
@@ -619,23 +658,126 @@ document.addEventListener('visibilitychange', () => {
 
 function onGeoError(err) {
   if (!state.nav) return;
-  $('manText').textContent = err.code === 1 ? 'Location permission denied' : 'Waiting for GPS…';
+  state.nav.msg = err.code === 1 ? 'Location permission denied' : 'Waiting for GPS…';
+  if (!state.nav.events) renderComing();
 }
 
 function zoomForSpeed(v) {
-  if (v < 8) return 17;
-  if (v < 20) return 16;
-  if (v < 28) return 15.5;
-  return 15;
+  if (v < 8) return 15.5;
+  if (v < 20) return 14.5;
+  if (v < 28) return 14;
+  return 13.5;
 }
+
+const ZERO_PAD = { top: 0, bottom: 0, left: 0, right: 0 };
 
 function follow() {
   const n = state.nav;
   if (!n || !n.center) return;
+  if (state.settings.view === 'eye') return eyeFollow(n);
+  n.zoom = null;
   const h = window.innerHeight;
   map.easeTo({
-    center: n.center, bearing: n.bearing, pitch: 60, zoom: zoomForSpeed(n.speed), duration: 900, easing: (t) => t,
+    center: n.center, bearing: n.bearing, pitch: 50, zoom: zoomForSpeed(n.speed), duration: 900, easing: (t) => t,
     padding: { top: Math.round(h * 0.45), bottom: 90, left: 0, right: 0 },
+  });
+}
+
+// Top-down, north-up: frame the driver and the road a few miles ahead, clear of the list and the bottom bar.
+function eyeFollow(n) {
+  const r = state.route;
+  const total = state.cum[state.cum.length - 1];
+  const reach = C.REACH[state.settings.reach] || C.REACH.mid;
+  const b = new maplibregl.LngLatBounds(n.center, n.center);
+  b.extend(C.pointAt(r.coords, state.cum, Math.min(total, (n.along || 0) + reach)));
+  const wide = window.innerWidth >= 760;
+  const h = window.innerHeight;
+  const listH = Math.min(h * 0.5, 64 + (state.settings.rows - 1) * 52);
+  const padding = wide ? { top: 60, bottom: 130, left: 460, right: 80 } : { top: Math.round(listH + 30), bottom: 130, left: 40, right: 130 };
+  const cam = map.cameraForBounds(b, { padding, maxZoom: 15.5, bearing: 0 });
+  if (!cam) return;
+  let zoom = Math.round(cam.zoom * 4) / 4;
+  if (n.zoom != null && Math.abs(zoom - n.zoom) < 0.3) zoom = n.zoom; // hold steady against small changes
+  n.zoom = zoom;
+  map.easeTo({ center: cam.center, zoom, bearing: 0, pitch: 0, padding: ZERO_PAD, duration: 900, easing: (t) => t });
+}
+
+// ---------- coming up list + numbered map pins ----------
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function eventGlyph(e) {
+  if (e.kind === 'turn') return C.MANEUVER_ICON[e.type] || '↑';
+  if (e.kind === 'light') return '🚦';
+  return String(e.limit.value);
+}
+
+function eventRow(e, i) {
+  const li = el('li', `ev-${e.kind}`);
+  const glyph = el('span', 'g');
+  if (e.kind === 'limit') glyph.append(el('span', `mini ${e.limit.unit === 'mph' ? 'us' : 'eu'}`, e.limit.value));
+  else glyph.textContent = eventGlyph(e);
+  const text = el('span', 't');
+  if (e.kind === 'turn') text.textContent = e.text;
+  else if (e.kind === 'light') text.textContent = 'Traffic light';
+  else {
+    text.textContent = `Speed limit ${e.limit.value} ${e.limit.unit}`;
+    if (e.limit.hgv) text.append(' ', el('span', 'tr', 'TRUCKS'));
+  }
+  li.append(el('span', 'n', i + 1), glyph, el('span', 'd', C.fmtDist(e.dist, units())), text);
+  return li;
+}
+
+function renderComing() {
+  const n = state.nav;
+  const ol = $('coming');
+  if (!n) return ol.replaceChildren();
+  const rows = [];
+  if (n.arrived) {
+    const li = el('li', 'ev-turn');
+    li.append(el('span', 'n', '✓'), el('span', 'g', '◎'), el('span', 'd', ''), el('span', 't', `Arrived${state.to ? ': ' + state.to.label : ''}`));
+    rows.push(li);
+    syncPins([]);
+  } else if (!n.events) {
+    const li = el('li');
+    li.append(el('span', 'n', '…'), el('span', 'g', '…'), el('span', 'd', ''), el('span', 't', n.msg || 'Waiting for GPS…'));
+    rows.push(li);
+  } else if (!n.events.length) {
+    const li = el('li');
+    li.append(el('span', 'n', '·'), el('span', 'g', '↑'), el('span', 'd', ''), el('span', 't', 'Nothing coming up. Stay on this road.'));
+    rows.push(li);
+    syncPins([]);
+  } else {
+    n.events.forEach((e, i) => rows.push(eventRow(e, i)));
+    syncPins(n.events);
+  }
+  ol.replaceChildren(...rows);
+}
+
+const pinPool = [];
+function syncPins(events) {
+  while (pinPool.length < events.length) {
+    const element = document.createElement('div');
+    pinPool.push({ element, marker: new maplibregl.Marker({ element, anchor: 'left', offset: [10, 0] }), on: false });
+  }
+  pinPool.forEach((p, i) => {
+    const e = events[i];
+    if (!e) {
+      if (p.on) { p.marker.remove(); p.on = false; }
+      return;
+    }
+    p.element.className = `pin ${e.kind}`;
+    p.element.replaceChildren(el('b', null, i + 1), el('span', null, eventGlyph(e)));
+    // Stack pins that sit on the same spot (e.g. a turn and the light beside it) instead of overlapping.
+    const same = events.slice(0, i).filter((o) => C.haversine(o.pt, e.pt) < 25).length;
+    p.marker.setOffset([10, same * 28]);
+    p.marker.setLngLat(e.pt);
+    if (!p.on) { p.marker.addTo(map); p.on = true; }
   });
 }
 
@@ -661,6 +803,7 @@ function onFix(pos) {
   $('offRoute').hidden = n.offCount < 3;
   if (n.offCount >= 3) reroute(p);
 
+  if (onRoute || n.along == null) n.along = snap.along;
   n.center = onRoute ? snap.point : p;
   const heading = pos.coords.heading;
   n.bearing = onRoute ? snap.bearing : Number.isFinite(heading) && speed > 2 ? heading : n.bearing;
@@ -673,22 +816,15 @@ function onFix(pos) {
 
   const u = units();
   const prog = C.navProgress(r.steps, state.cum, snap.along);
-  const next = prog.next;
   if (prog.remainingDist < 30 && !n.arrived) {
     n.arrived = true;
     speak('You have arrived');
   }
-  if (n.arrived) {
-    $('manIcon').textContent = '◎';
-    $('manDist').textContent = 'Arrived';
-    $('manText').textContent = state.to ? state.to.label : '';
-  } else {
-    const target = next || prog.step;
-    $('manIcon').textContent = C.MANEUVER_ICON[target.type] || '↑';
-    $('manDist').textContent = C.fmtDist(prog.distToNext, u);
-    $('manText').textContent = target.instruction;
-    announce(prog, speed);
-  }
+  if (!n.arrived) announce(prog, speed);
+  n.events = C.upcomingEvents(r, state.cum, n.along, {
+    max: state.settings.rows, turns: state.settings.showTurns, limits: state.settings.showLimits, lights: state.settings.showLights,
+  });
+  renderComing();
 
   $('spdVal').textContent = C.speedValue(speed, u);
   const eta = new Date(Date.now() + prog.remainingDur * 1000);

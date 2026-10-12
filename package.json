@@ -1,0 +1,12 @@
+{
+  "name": "trucknav",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "e2e": "python3 test/e2e.py",
+    "serve": "python3 -m http.server 8080"
+  }
+}

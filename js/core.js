@@ -381,12 +381,14 @@ export const DEFAULT_TRUCK = {
   hazmat: false,
   avoidTolls: false,
   avoidFerries: true,
+  backroads: true, // avoid motorways (openrouteservice avoid_features: highways)
 };
 
 const r2 = (n) => Math.round(n * 100) / 100;
 
 export function orsBody(points, truck, language = 'en') {
   const avoid = [];
+  if (truck.backroads) avoid.push('highways');
   if (truck.avoidTolls) avoid.push('tollways');
   if (truck.avoidFerries) avoid.push('ferries');
   const options = {
@@ -654,4 +656,45 @@ export function tilesAlongRoute(coords, zooms) {
     }
   }
   return out;
+}
+
+// ---------- region focus ----------
+
+// Georgia, South Carolina and North Carolina, [west, south, east, north].
+export const REGION = [-85.7, 30.3, -75.3, 36.7];
+
+// How far ahead the top-down view frames the road (meters).
+export const REACH = { near: 3000, mid: 6000, far: 12000 };
+
+// ---------- "coming up" list ----------
+
+// The next few things a driver needs to know, nearest first: turns, speed-limit changes, traffic lights.
+// A limit change only counts when the new limit holds for at least minLimitLen meters (stops flicker
+// from short mismatches) and differs from the last known limit (gaps without data are skipped).
+export function upcomingEvents(route, cum, along, o = {}) {
+  const { max = 4, turns = true, limits = true, lights = true, minLimitLen = 150 } = o;
+  const ev = [];
+  if (turns) {
+    route.steps.forEach((s, i) => {
+      if (s.type === 11 || s.type === 6) return; // depart, continue straight
+      const at = cum[s.from];
+      if (at > along - 3) ev.push({ kind: 'turn', id: `t${i}`, at, type: s.type, text: s.instruction, pt: route.coords[s.from] });
+    });
+  }
+  if (limits) {
+    let last = limitAt(route.speedIntervals, along);
+    for (const it of route.speedIntervals) {
+      if (!it.limit || it.from <= along || it.to - it.from < minLimitLen) continue;
+      if (last && limitKey(last) === limitKey(it.limit)) continue;
+      last = it.limit;
+      ev.push({ kind: 'limit', id: `s${Math.round(it.from)}`, at: it.from, limit: it.limit, pt: pointAt(route.coords, cum, it.from) });
+    }
+  }
+  if (lights) {
+    for (const s of route.signals) {
+      if (s.along > along - 3) ev.push({ kind: 'light', id: `l${s.id}`, at: s.along, pt: [s.lon, s.lat] });
+    }
+  }
+  ev.sort((a, b) => a.at - b.at);
+  return ev.slice(0, max).map((e) => ({ ...e, dist: Math.max(0, e.at - along) }));
 }

@@ -15,6 +15,14 @@ export const DEFAULT_SETTINGS = {
   signalAlert: true,
   speedAlert: true,
   night: false,
+  view: 'eye',
+  reach: 'mid',
+  rows: 4,
+  showTurns: true,
+  showLimits: true,
+  showLights: true,
+  countyLines: true,
+  regionOnly: true,
 };
 
 function readJSON(key) {

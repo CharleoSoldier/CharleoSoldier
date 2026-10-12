@@ -46,15 +46,10 @@
   </section>
 
   <section id="nav" hidden>
-    <div id="banner">
-      <div id="manIcon">↑</div>
-      <div class="ban-text">
-        <div id="manDist"></div>
-        <div id="manText"></div>
-      </div>
-    </div>
+    <ol id="coming" aria-label="Coming up"></ol>
     <div id="offRoute" hidden>Off route — rerouting…</div>
     <div class="navFab">
+      <button id="btnView" aria-label="Switch view: top-down or driver's 3D"><span id="viewIcon">⌖</span></button>
       <button id="btnOverview" aria-label="Show whole route">⤢</button>
       <button id="btnRecenter" aria-label="Follow my position">◎</button>
     </div>
@@ -88,6 +83,8 @@
       <label class="check"><input type="checkbox" name="hazmat"> Hazardous materials</label>
       <label class="check"><input type="checkbox" name="avoidTolls"> Avoid tolls</label>
       <label class="check"><input type="checkbox" name="avoidFerries"> Avoid ferries</label>
+      <label class="check"><input type="checkbox" name="backroads"> Backroads: avoid interstates</label>
+      <p class="hint">Check your own limits: South Carolina caps a 5-axle combination at 73,280 lb off the interstate (plus tolerance), and tandem axles at 36,000 lb. 80,000 lb is for the interstate only.</p>
       <div class="actions">
         <button value="cancel" formnovalidate>Cancel</button>
         <button value="save" class="primary">Save</button>
@@ -108,6 +105,34 @@
         <input name="orsKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste key">
       </label>
       <p class="hint">Free key: <a href="https://openrouteservice.org/plans/" target="_blank" rel="noopener">openrouteservice.org/plans</a>. Stored only on this device.</p>
+      <h3>Driving view</h3>
+      <label>View
+        <select name="view">
+          <option value="eye">Top-down overview (north up)</option>
+          <option value="drive">Driver's 3D (heading up)</option>
+        </select>
+      </label>
+      <label>How far ahead to show
+        <select name="reach">
+          <option value="near">Near (about 2 mi)</option>
+          <option value="mid">Medium (about 4 mi)</option>
+          <option value="far">Far (about 7 mi)</option>
+        </select>
+      </label>
+      <h3>Coming up list</h3>
+      <label>Rows
+        <select name="rows">
+          <option value="2">2</option><option value="3">3</option><option value="4">4</option>
+          <option value="5">5</option><option value="6">6</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" name="showTurns"> Turns</label>
+      <label class="check"><input type="checkbox" name="showLimits"> Speed limit changes</label>
+      <label class="check"><input type="checkbox" name="showLights"> Traffic lights</label>
+      <h3>Map</h3>
+      <label class="check"><input type="checkbox" name="countyLines"> County lines</label>
+      <label class="check"><input type="checkbox" name="regionOnly"> Search only GA, SC, NC</label>
+      <h3>Sound</h3>
       <label class="check"><input type="checkbox" name="voice"> Voice directions</label>
       <label class="check"><input type="checkbox" name="signalAlert"> Traffic light alerts</label>
       <label class="check"><input type="checkbox" name="speedAlert"> Over-speed alert</label>
